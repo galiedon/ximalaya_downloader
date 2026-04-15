@@ -73,6 +73,13 @@ let vf = function () {
     }
         , vi;
 }()
+// v3: 非ASCII字符编码函数，用于 vg codec (charCode > 0x7f 时触发)
+// 当前 body_meta 为纯ASCII输入，此路径不会执行
+// 保留此 stub 防止 ReferenceError
+function v3(charCode) {
+    return String.fromCharCode(charCode)
+}
+
 let vg = function () {
     function vu() {
         this[b('0x382')] = [];
@@ -145,9 +152,17 @@ function encrypt(v7) {
     return v2[b('0xc')](vh[vb][b('0x381')]()), v2[b('0x23')]('');
 }
 
+// ======== 浏览器指纹参数 ========
+// 以下 GPU 信息会作为浏览器指纹的一部分发送给服务端
+// 不同机器的 GPU 不同，硬编码可能导致指纹异常被风控检测
+// TODO: 考虑通过 Playwright 动态获取 WebGL 渲染器信息
+const GPU_RENDERER = 'ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 Ti SUPER (0x00002705) Direct3D11 vs_5_0 ps_5_0, D3D11)'
+const GPU_VENDOR = 'Google Inc. (NVIDIA)'
+const GPU_VERSION = 'WebGL 1.0 (OpenGL ES 2.0 Chromium)'
+
 function buildCUID() {
 
-    var b1 = "1,1,1,0,0ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 Ti SUPER (0x00002705) Direct3D11 vs_5_0 ps_5_0, D3D11)Google Inc. (NVIDIA)WebGL 1.0 (OpenGL ES 2.0 Chromium)" + bid + "Win32,zh-CN,0,-1,Gecko,1,24,zh-CN,20030107,-1,33,1,100,-1,-11920108024" + userAgent;
+    var b1 = "1,1,1,0,0" + GPU_RENDERER + GPU_VENDOR + GPU_VERSION + bid + "Win32,zh-CN,0,-1,Gecko,1,24,zh-CN,20030107,-1,33,1,100,-1,-11920108024" + userAgent;
     let str = eR(b1).slice(0, 16)
     let result = q1(str)
     return result
@@ -157,8 +172,7 @@ let userAgent = randomUseragent.getRandom()
 // let userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Edg/128.0.0.0"
 let bid = eR(userAgent) + ",c6eb62fb672d4d229b138295eb8d0d46c97ec106,z6o-f17b8cd007f84e81a5c6c1446a3edc1d6c98f32a,1m3m-8c67434f95ec7aa072eac28a7cbc0c5f9ee90949-5f4d33598492d6aef903f08ed91af1c31aa666cf"
 
-let body_meta = "member_id=&dpenable=0&cid=xmweb_www&cv=2.5.2&ckd=[]&cks=[]&cke=[]&td=[]&scroll=[]&ca=&cp=&scid=&frt=&coenable=0&chenable=0&adenable=0&actenable=0&nid=&dme=-1&o=-1&b=chrome&rc=0&pt=1&pnt=589&ml=4294705152&lu=https%3A%2F%2Fwww.ximalaya.com%2F&bv=128.0.0.0&chmv=128.0.0.0&vp=1912,227,1920,1080,1920,1032,0,0,24,24,1920,227,-1,1,1920,1032,-1,-1&n=Win32,zh-CN,0,-1,Gecko,1,24,zh-CN,20030107,-1,33,1,1&in=0,0&hl=0&ste=0,-1,-1&av=5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36&lss=1,1,1,0,0&lf=187,29,128,255&tz=-480&ogvd=Google Inc. (NVIDIA)&ogrder=ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 Ti SUPER (0x00002705) Direct3D11 vs_5_0 ps_5_0, D3D11)&ogver=WebGL 1.0 (OpenGL ES 2.0 Chromium)&h=" + bid + "&isold=0&cuid=" + buildCUID() + "&acid=&openid=&hs=1111111011111111111111111111101111111011110&pid=m0hplmguit4b1a9cedaf4b0925af9304e604d58605a86971f4&lp=0&nt=" + Date.now() + "&t=0," + Date.now() + "," + Date.now() + "," + Date.now() + "&v=1,0&bat=1-n-0&gyro=-1--1--1"
-// let body_meta = "member_id=&dpenable=0&cid=xmweb_www&cv=2.5.2&ckd=[]&cks=[]&cke=[]&td=[]&scroll=[]&ca=&cp=&scid=&frt=&coenable=0&chenable=0&adenable=0&actenable=0&nid=&dme=-1&o=-1&b=chrome&rc=0&pt=1&pnt=208&ml=4294705152&lu=https%3A%2F%2Fwww.ximalaya.com%2F&bv=128.0.0.0&chmv=128.0.0.0&vp=1904,384,1920,1080,1920,1032,0,0,24,24,1912,384,-1,1,1920,1032,-1,-1&n=Win32,en,0,-1,Gecko,1,24,en|zh-CN|en-GB|en-US,20030107,-1,33,1,1&in=0,0&hl=0&ste=0,-1,-1&av=5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36 Edg/128.0.0.0&lss=1,1,1,0,0&lf=187,29,128,255&tz=-480&ogvd=Google Inc. (NVIDIA)&ogrder=ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 Ti SUPER (0x00002705) Direct3D11 vs_5_0 ps_5_0, D3D11)&ogver=WebGL 1.0 (OpenGL ES 2.0 Chromium)&h=" + bid + "&isold=0&cuid=" + buildCUID() + "&acid=&openid=&hs=1111111011111111111111111111101111111011110&pid=m0hsqgrsmn415dd80a9db735d6f139d51904a74f8d6c8a82c2&lp=0&nt=" + Date.now() + "&t=0," + Date.now() + "," + Date.now() + "," + Date.now() + "&v=1,0&bat=1-n-0&gyro=-1--1--1"
+let body_meta = "member_id=&dpenable=0&cid=xmweb_www&cv=2.5.2&ckd=[]&cks=[]&cke=[]&td=[]&scroll=[]&ca=&cp=&scid=&frt=&coenable=0&chenable=0&adenable=0&actenable=0&nid=&dme=-1&o=-1&b=chrome&rc=0&pt=1&pnt=589&ml=4294705152&lu=https%3A%2F%2Fwww.ximalaya.com%2F&bv=128.0.0.0&chmv=128.0.0.0&vp=1912,227,1920,1080,1920,1032,0,0,24,24,1920,227,-1,1,1920,1032,-1,-1&n=Win32,zh-CN,0,-1,Gecko,1,24,zh-CN,20030107,-1,33,1,1&in=0,0&hl=0&ste=0,-1,-1&av=5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36&lss=1,1,1,0,0&lf=187,29,128,255&tz=-480&ogvd=" + GPU_VENDOR + "&ogrder=" + GPU_RENDERER + "&ogver=" + GPU_VERSION + "&h=" + bid + "&isold=0&cuid=" + buildCUID() + "&acid=&openid=&hs=1111111011111111111111111111101111111011110&pid=m0hplmguit4b1a9cedaf4b0925af9304e604d58605a86971f4&lp=0&nt=" + Date.now() + "&t=0," + Date.now() + "," + Date.now() + "," + Date.now() + "&v=1,0&bat=1-n-0&gyro=-1--1--1"
 
 function getEncryptBody() {
     return encrypt(body_meta)

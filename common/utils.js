@@ -1,15 +1,15 @@
 function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 function httpCookie(cookies) {
     return cookies.cookies.map(cookie => {
-        if (cookie.name == 'web_login')
+        if (cookie.name === 'web_login')
             cookie.value = Date.now()
-        if (cookie.name == 'Hm_lpvt_4a7d8ec50cfd6af753c4f8aee3425070')
+        if (cookie.name === 'Hm_lpvt_4a7d8ec50cfd6af753c4f8aee3425070')
             cookie.value = Math.floor(Date.now() / 1000)
         return `${cookie.name}=${cookie.value}`
-    }).join('; ');
+    }).join('; ')
 }
 
 
@@ -19,14 +19,14 @@ const PLATFORM = '"macOS"'
 
 
 /**
- *
  * @param referer 'https://www.ximalaya.com'
+ * @param cookie {string}
  */
 function buildHeaders(referer, cookie) {
     if (typeof cookie !== 'string') {
         throw new Error('Cookie must be string')
     }
-    const headers = {
+    return {
         'Accept': '*/*',
         'Accept-Language': 'zh-CN,zh;q=0.9',
         'Cache-Control': 'no-cache',
@@ -42,29 +42,28 @@ function buildHeaders(referer, cookie) {
         'sec-ch-ua': UA,
         'sec-ch-ua-mobile': '?0',
         'sec-ch-ua-platform': PLATFORM
-    };
-    return headers
+    }
 }
 
 
 function parseCookies(cookieArray) {
-    const cookies = cookieArray.filter(cookieStr=>cookieStr.trim() != '').map(cookieStr => {
-        const cookieParts = cookieStr.split(';').map(part => part.trim());
-        const cookieInfo = {};
-        cookieParts.forEach(part => {
-            const [key, value] = part.split('=');
-            if (key === 'Max-Age' || key === 'Expires') {
-                cookieInfo.expires = Date.parse(value);
-            } else if (key === 'HttpOnly') {
-                cookieInfo.httpOnly = true;
-            } else {
-                cookieInfo[key] = value;
+    return cookieArray
+        .filter(cookieStr => cookieStr.trim() !== '')
+        .map(cookieStr => {
+            const cookieParts = cookieStr.split(';').map(part => part.trim())
+            const cookieInfo = {}
+            for (const part of cookieParts) {
+                const [key, value] = part.split('=')
+                if (key === 'Max-Age' || key === 'Expires') {
+                    cookieInfo.expires = Date.parse(value)
+                } else if (key === 'HttpOnly') {
+                    cookieInfo.httpOnly = true
+                } else {
+                    cookieInfo[key] = value
+                }
             }
-        });
-        return cookieInfo;
-    });
-
-    return cookies;
+            return cookieInfo
+        })
 }
 
 /**
@@ -73,35 +72,29 @@ function parseCookies(cookieArray) {
  * @returns {string}
  */
 function convertCookiesToString(cookies) {
-    const parts = [];
-
-    cookies.forEach(cookieObj => {
+    const parts = []
+    for (const cookieObj of cookies) {
         for (const [key, value] of Object.entries(cookieObj)) {
             if (key === 'expires' || key === 'Domain' || key === 'Path' || key === 'httpOnly' || key === 'secure') {
-                continue; // Skip these attributes for the desired format
+                continue
             }
-            parts.push(`${key}=${value}`);
+            parts.push(`${key}=${value}`)
         }
-    });
-
-    return parts.join('; ');
+    }
+    return parts.join('; ')
 }
 
 /**
- * 在cookie文件中数据动态追加数据
- * @param _cookies
- * @param key
- * @param value
+ * 在cookie数组中追加一条cookie（如果key不存在的话）
+ * @param _cookies {Array}
+ * @param key {string}
+ * @param value {*}
  */
 function addCookie(_cookies, key, value) {
-    if (_cookies.length != 0) {
-        for (const cookiesKey in _cookies) {
-            let item = _cookies[cookiesKey]
-            for (const itemKey in item) {
-                if (itemKey == key) {
-                    return
-                }
-            }
+    // 检查是否已存在该 key
+    for (const item of _cookies) {
+        if (Object.prototype.hasOwnProperty.call(item, key)) {
+            return
         }
     }
     _cookies.push({

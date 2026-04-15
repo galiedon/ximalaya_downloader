@@ -8,7 +8,7 @@ import {decrypt} from "../handler/core/mac-decrypt.js"
 class DarwinDownloader extends AbstractDownloader {
 
     constructor() {
-        super('mac');
+        super('mac')
         this.clientName = "喜马拉雅电脑版"
     }
 
@@ -32,25 +32,9 @@ class DarwinDownloader extends AbstractDownloader {
     }
 
     _decrypt(encodeText) {
-        const url = decrypt.getSoundCryptLink(encodeText)
-        return url
+        return decrypt.getSoundCryptLink(encodeText)
     }
 }
-
-
-async function test() {
-    const downloader = new DarwinDownloader()
-    if (!await downloader.isLogin()) {
-        await downloader.login()
-    }
-    const album = await downloader.getAlbum(33476331)
-    const trackPageResult = await downloader.getTracksList(33476331, 1, 1)
-    const data = await downloader.download(trackPageResult.tracks[0].trackId)
-    console.log(data)
-}
-
-
-// test()
 
 export {
     DarwinDownloader

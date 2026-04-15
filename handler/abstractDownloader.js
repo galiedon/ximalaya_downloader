@@ -2,10 +2,10 @@ import {iaxios} from '../common/axioscf.js'
 import {config} from '../common/config.js'
 import {log} from '../common/log4jscf.js'
 import {sleep, buildHeaders, parseCookies} from '../common/utils.js'
-import path from "path";
-import fs from "fs";
-import {exec, spawn} from "child_process";
-import kill from "tree-kill";
+import path from "path"
+import fs from "fs"
+import {exec, spawn} from "child_process"
+import kill from "tree-kill"
 import {CustomError} from '../common/error.js'
 import os from 'os'
 
@@ -13,16 +13,21 @@ import os from 'os'
  * 下载抽象类
  */
 class AbstractDownloader {
+    static browser = null
+
+    static setBrowser(browserHelper) {
+        AbstractDownloader.browser = browserHelper
+    }
+
     constructor(deviceType) {
-        if (this.constructor == AbstractDownloader) {
+        if (this.constructor === AbstractDownloader) {
             throw new Error("抽象类不能被实例化")
         }
         this.deviceType = deviceType
         this.cookiePath = path.join(config.xmd.replace('~', os.homedir()), `${deviceType}-cookies.json`)
-        this.qrCodePath = path.join(config.xmd.replace('~', os.homedir()), `${deviceType}-qrcode.png`);
+        this.qrCodePath = path.join(config.xmd.replace('~', os.homedir()), `${deviceType}-qrcode.png`)
         this.albumId = null
         this.cookies = null
-
     }
 
     /**
@@ -39,69 +44,67 @@ class AbstractDownloader {
      * @private
      */
     async __readCookies() {
-        const readFile = () => {
-            return new Promise((resolve) => {
-                return fs.readFile(this.cookiePath, (err, data) => {
-                    if (err) {
-                        return resolve(null)
-                    }
+        return new Promise((resolve) => {
+            fs.readFile(this.cookiePath, (err, data) => {
+                if (err) {
+                    return resolve(null)
+                }
+                try {
                     return resolve(JSON.parse(String(data)))
-                })
+                } catch {
+                    return resolve(null)
+                }
             })
-        }
-        return await readFile()
+        })
     }
-
 
     /**
      * 打开登录二维码
-     * @param qrCodePath
      * @returns {ChildProcessWithoutNullStreams}
      */
     _openQrCode() {
-        const platform = process.platform;
-        let command;
+        const platform = process.platform
+        let command
 
         if (platform === 'win32') {
-            command = `start ${this.qrCodePath}`;
+            command = `start "" "${this.qrCodePath}"`
         } else if (platform === 'darwin') {
-            command = `open ${this.qrCodePath}`;
+            command = `open "${this.qrCodePath}"`
         } else if (platform === 'linux') {
-            command = `xdg-open ${this.qrCodePath}`;
+            command = `xdg-open "${this.qrCodePath}"`
         }
 
-        const openProcess = spawn(command, [], {shell: true});
-        return openProcess;
+        return spawn(command, [], {shell: true})
     }
 
     /**
      * 关闭登录二维码
      * @param openProcess
-     * @returns {Promise<unknown>}
+     * @returns {Promise<void>}
      */
     _killQrCode(openProcess) {
         return new Promise((resolve, reject) => {
-            if (process.platform == 'darwin') {
+            const platform = process.platform
+            if (platform === 'darwin') {
                 exec(`osascript -e 'quit app "Preview"'`, (err) => {
                     if (err) {
-                        log.error('Error closing the image viewer:', err);
+                        log.error('Error closing the image viewer:', err)
                         return reject(err)
                     }
                     return resolve()
-                });
-            } else if (process.platform === 'win32') {
-                // 使用 taskkill 命令终止进程
+                })
+            } else if (platform === 'win32') {
                 exec(`taskkill /IM PhotosApp.exe /F`, (err) => {
                     if (err) {
-                        log.error('Error closing the image viewer:', err);
+                        log.error('Error closing the image viewer:', err)
                         return reject(err)
                     }
                     return resolve()
-                });
+                })
             } else {
                 kill(openProcess.pid, 'SIGKILL', (err) => {
                     if (err) {
-                        log.error('Error closing the image viewer:', err);
+                        log.error('Error closing the image viewer:', err)
                         return reject(err)
                     }
                     return resolve()
@@ -124,49 +127,46 @@ class AbstractDownloader {
      * @returns {Promise<{qrId:int,img:str}>}
      */
     async __getQrCode(clientName) {
-        const url = `${config.loginBaseUrl}/web/qrCode/gen?level=L&source=${encodeURIComponent(clientName)}`;
+        const url = `${config.loginBaseUrl}/web/qrCode/gen?level=L&source=${encodeURIComponent(clientName)}`
         const response = await iaxios.get(url)
 
-        if (response.status != 200) {
-            throw new Error('网络请求失败');
+        if (response.status !== 200) {
+            throw new Error('网络请求失败')
         }
         if (response.data == null) {
-            throw new Error('数据为空');
+            throw new Error('数据为空')
         }
-        if (response.data.ret != 0) {
+        if (response.data.ret !== 0) {
             log.error("喜马拉雅内部异常", response.data)
             throw new Error("喜马拉雅内部异常")
         }
         return {
             qrId: response.data.qrId,
             img: response.data.img
-        }; // 将响应数据解析为 JSON
+        }
     }
-
 
     /**
      * 登录方法
      * @returns {Promise<AbstractDownloader>}
      */
     async login() {
-        // TODO 如果config中没有的cookies的话，就扫码获取
         let cookies = null
         if (config.cookie != null
             && config.cookie[this.deviceType] != null
             && config.cookie[this.deviceType]['serverMode']) {
-            if (config.cookie[this.deviceType].value == null || config.cookie[this.deviceType].value.trim() == '') {
-                throw new CustomError(`当前为非扫码模式，请在config.json中手动配置cookie.${this.deviceType}.value的值`)
+            if (config.cookie[this.deviceType].value == null || config.cookie[this.deviceType].value.trim() === '') {
+                throw new CustomError(10001, `当前为非扫码模式，请在config.json中手动配置cookie.${this.deviceType}.value的值`)
             }
             cookies = parseCookies(config.cookie[this.deviceType].value.split(';'))
         } else {
             const qrCode = await this._getQrCode()
-            const qrCodeBuffer = Buffer.from(qrCode.img, 'base64');
+            const qrCodeBuffer = Buffer.from(qrCode.img, 'base64')
 
-            fs.writeFileSync(this.qrCodePath, qrCodeBuffer);
+            fs.writeFileSync(this.qrCodePath, qrCodeBuffer)
 
             log.info(this.deviceType, "请使用喜马拉雅APP扫描登录二维码")
-            const openProcess = this._openQrCode();
-            //等待扫码
+            const openProcess = this._openQrCode()
             log.info(this.deviceType, "等待登录结果...")
             while (true) {
                 const loginResult = await this._getLoginResult(qrCode.qrId)
@@ -177,9 +177,8 @@ class AbstractDownloader {
                 await sleep(2000)
             }
 
-            //处理登录成功
             try {
-                await this._killQrCode(openProcess);
+                await this._killQrCode(openProcess)
             } catch (e) {
                 log.debug(e)
                 log.info(this.deviceType, "扫码已成功，可自行关闭图片程序")
@@ -198,27 +197,24 @@ class AbstractDownloader {
      * @returns {Promise<{cookies: JSONObject, isSuccess: boolean}|{isSuccess: boolean}>}
      */
     async _getLoginResult(qrId) {
-        const url = `${config.loginBaseUrl}/web/qrCode/check/${qrId}/${Date.now()}`;
+        const url = `${config.loginBaseUrl}/web/qrCode/check/${qrId}/${Date.now()}`
         const response = await iaxios.get(url)
 
-        if (response.status != 200) {
-            throw new Error('网络请求失败');
+        if (response.status !== 200) {
+            throw new Error('网络请求失败')
         }
         if (response.data == null) {
-            throw new Error('数据为空');
+            throw new Error('数据为空')
         }
-        let isSuccess = false
-        if (response.data.ret != 0) {
-            return {
-                isSuccess
-            }
+        if (response.data.ret !== 0) {
+            return {isSuccess: false}
         }
-        const cookieHeaders = response.headers['set-cookie'];
+        const cookieHeaders = response.headers['set-cookie']
         const cookies = parseCookies(cookieHeaders)
         return {
             isSuccess: true,
             cookies: cookies
-        };
+        }
     }
 
     async _getCurrentUser() {
@@ -226,28 +222,33 @@ class AbstractDownloader {
         const cookie = await this._getCookies()
         const headers = buildHeaders(config.baseUrl, cookie)
         const response = await iaxios.get(url, {headers: headers})
-        if (response.status != 200) {
-            throw new Error('网络请求失败');
+        if (response.status !== 200) {
+            throw new Error('网络请求失败')
         }
         if (response.data == null) {
-            throw new Error('数据为空');
+            throw new Error('数据为空')
         }
-        if (response.data.ret == 401) {
+        if (response.data.ret === 401) {
             log.error(response.data.msg)
             return null
         }
-        if (response.data.ret != 200) {
+        if (response.data.ret !== 200) {
             log.error("喜马拉雅内部异常", response.data)
             throw new Error("喜马拉雅内部异常")
         }
-        return response.data.data; // 将响应数据解析为 JSON
+        return response.data.data
     }
 
     /**
      * 检查用户账号信息
      * @param user
+     * @param single 是否只检查单条信息（不打印详情）
      */
     _checkUser(user, single) {
+        if (user == null) {
+            log.warn("无法获取用户信息，跳过用户检查")
+            return
+        }
         if (user.isLoginBan) {
             log.warn("该用户被禁止登录")
         }
@@ -267,7 +268,7 @@ class AbstractDownloader {
         if (cookies == null) {
             return false
         }
-        const user = await this._getCurrentUser(cookies)
+        const user = await this._getCurrentUser()
         if (user == null) {
             return false
         }
@@ -277,7 +278,7 @@ class AbstractDownloader {
     /**
      * 获取专辑简况
      * @param albumId
-     * @param cookies
+     * @param cookie
      * @returns {Promise<*>}
      */
     async _getAlbumSimple(albumId, cookie) {
@@ -285,24 +286,23 @@ class AbstractDownloader {
         const referer = `${config.baseUrl}/album/${albumId}`
         const headers = buildHeaders(referer, cookie)
         const response = await iaxios.get(url, {headers: headers})
-        if (response.status != 200) {
-            throw new Error('网络请求失败');
+        if (response.status !== 200) {
+            throw new Error('网络请求失败')
         }
         if (response.data == null) {
-            throw new Error('数据为空');
+            throw new Error('数据为空')
         }
-        if (response.data.ret != 200) {
+        if (response.data.ret !== 200) {
             log.error("喜马拉雅内部异常", response.data)
             throw new Error("喜马拉雅内部异常")
         }
-        return response.data.data;
+        return response.data.data
     }
-
 
     /**
      * 获取专辑信息
      * @param albumId
-     * @param cookies
+     * @param cookie
      * @returns {Promise<*>}
      */
     async _getAlbumInfo(albumId, cookie) {
@@ -310,17 +310,17 @@ class AbstractDownloader {
         const referer = `${config.baseUrl}/album/${albumId}`
         const headers = buildHeaders(referer, cookie)
         const response = await iaxios.get(url, {headers: headers})
-        if (response.status != 200) {
-            throw new Error('网络请求失败');
+        if (response.status !== 200) {
+            throw new Error('网络请求失败')
         }
         if (response.data == null) {
-            throw new Error('数据为空');
+            throw new Error('数据为空')
         }
-        if (response.data.ret != 200) {
+        if (response.data.ret !== 200) {
             log.error("喜马拉雅内部异常", response.data)
             throw new Error("喜马拉雅内部异常")
         }
-        return response.data.data;
+        return response.data.data
     }
 
     /**
@@ -332,8 +332,8 @@ class AbstractDownloader {
         if (albumId == null) {
             throw new Error("albumId不能为空")
         }
-        const simple = await this._getAlbumSimple(albumId, await this._getCookies())
-        const info = await this._getAlbumInfo(albumId, await this._getCookies())
+        const cookie = await this._getCookies()
+        const simple = await this._getAlbumSimple(albumId, cookie)
         const book = await this.getTracksList(albumId, 1, 1)
         return {
             albumId: albumId,
@@ -351,21 +351,15 @@ class AbstractDownloader {
      * @returns {Promise<*>}
      */
     async getTracksList(albumId, pageNum, pageSize) {
-        const url = `${config.baseUrl}/revision/album/v1/getTracksList?albumId=${albumId}&pageNum=${pageNum}&pageSize=${pageSize}`
-        const referer = `${config.baseUrl}/album/${albumId}`
-        const headers = buildHeaders(referer, await this._getCookies())
-        const response = await iaxios.get(url, {headers: headers})
-        if (response.status != 200) {
-            throw new Error('网络请求失败')
+        if (AbstractDownloader.browser == null) {
+            throw new Error('BrowserHelper未初始化')
         }
-        if (response.data == null) {
-            throw new Error('数据为空')
-        }
-        if (response.data.ret != 200) {
-            log.error("喜马拉雅内部异常", response.data)
-            throw new Error("喜马拉雅内部异常")
-        }
-        return response.data.data
+        return await AbstractDownloader.browser.getTracksList(
+            albumId,
+            pageNum,
+            pageSize,
+            await this._getCookies()
+        )
     }
 
     /**
@@ -375,88 +369,91 @@ class AbstractDownloader {
      * @private
      */
     async _getBaseInfo(trackId) {
-        const trackQualityLevel = 2
-        const url = `${config.baseUrl}/mobile-playpage/track/v3/baseInfo/${Date.now()}?device=${this.deviceType}&trackId=${trackId}&trackQualityLevel=${trackQualityLevel}`
-        const referer = `${config.baseUrl}/album/${trackId}`
-        const headers = buildHeaders(referer, await this._getCookies())
-        const response = await iaxios.get(url, {headers: headers})
-        if (response.status != 200) {
-            throw new Error('网络请求失败');
+        if (AbstractDownloader.browser == null) {
+            throw new Error('BrowserHelper未初始化')
         }
-        if (response.data == null) {
-            throw new Error('数据为空');
+        const responseData = await AbstractDownloader.browser.getBaseInfo(
+            trackId,
+            this.deviceType,
+            await this._getCookies()
+        )
+        if (responseData == null) {
+            throw new Error('数据为空')
         }
-        if (response.data.ret == 999 || response.data.ret == 1001) {
-            log.error(`${this.deviceType}端喜马拉雅接口内部异常`, response.data)
+        if (responseData.ret === 999 || responseData.ret === 1001) {
+            log.error(`${this.deviceType}端喜马拉雅接口内部异常`, responseData)
             throw new CustomError(999, `${this.deviceType}端速率限制`)
         }
-        if (response.data.ret != 0) {
-            log.error(`${this.deviceType}端喜马拉雅接口内部异常`, response.data)
+        if (responseData.ret !== 0) {
+            log.error(`${this.deviceType}端喜马拉雅接口内部异常`, responseData)
             throw new Error("喜马拉雅内部异常")
         }
         return {
-            playUrlList: response.data.trackInfo.playUrlList,
-            trackTitle: response.data.albumInfo.title
+            playUrlList: responseData.trackInfo.playUrlList,
+            trackTitle: responseData.albumInfo.title
         }
     }
 
     /**
      * 获取音频数据
      * @param url
-     * @returns {Promise<*>}
+     * @returns {Promise<{buffer, extension}>}
      */
     async _getAudio(url) {
         if (url == null) {
             throw new Error("Invalid url")
         }
-        let response = await iaxios({
+        const response = await iaxios({
             method: 'GET',
             url: url,
             responseType: 'arraybuffer',
         })
-        if (response.status != 200) {
-            throw new Error('网络请求失败');
+        if (response.status !== 200) {
+            throw new Error('网络请求失败')
         }
         if (response.data == null) {
-            throw new Error('数据为空');
+            throw new Error('数据为空')
         }
 
-        // 获取文件后缀函数
-        function getFileExtension(contentType) {
-            const parts = contentType.split('/');
+        const contentType = response.headers['content-type']
+        let extension = ''
+        if (contentType) {
+            const parts = contentType.split('/')
             if (parts.length === 2) {
-                return '.' + parts[1].replace("x-", "");
+                extension = '.' + parts[1].replace("x-", "")
             }
-            return '';
         }
-
-        const contentType = response.headers['content-type'];
-        const fileExtension = getFileExtension(contentType)
 
         return {
             buffer: response.data,
-            extension: fileExtension
+            extension: extension
         }
     }
 
     /**
-     * 获取解密参数
-     * @param t
-     * @returns {*}
+     * 获取解密参数 — 从 playUrlList 中选取最优质音频URL
+     * @param t playUrlList
+     * @returns {{qualityLevel, encodeText}}
      */
     _playUrl = (t) => {
-        let e, r = {}, n = 1;
-        return r.mediaType && t.some((function (t) {
-                return t.type.indexOf(r.mediaType) >= 0 && (e = t.url,
-                    !0)
+        let e, r = {}, n = 1
+        r.mediaType && t.some((item) => {
+            if (item.type.indexOf(r.mediaType) >= 0) {
+                e = item.url
+                return true
             }
-        )),
-        e || (e = t[0].url),
-        t && t.length && (n = t[0].qualityLevel),
-            {
-                qualityLevel: n,
-                encodeText: e
-            }
+            return false
+        })
+        if (!e) {
+            e = t[0].url
+        }
+        if (t && t.length) {
+            n = t[0].qualityLevel
+        }
+        return {
+            qualityLevel: n,
+            encodeText: e
+        }
     }
 
     /**
@@ -468,28 +465,21 @@ class AbstractDownloader {
         throw new Error("抽象方法，子类需要实现")
     }
 
-
     /**
      * 下载音频
      * @param trackId
-     * @returns {Promise<buffer, fileExtension>}
+     * @returns {Promise<{buffer, extension}>}
      */
     async download(trackId) {
-        let user = await this._getCurrentUser()
-        await this._checkUser(user, true)
+        const user = await this._getCurrentUser()
+        this._checkUser(user, true)
         const baseInfo = await this._getBaseInfo(trackId)
         const e = this._playUrl(baseInfo.playUrlList)
         const url = this._decrypt(e.encodeText)
-        const data = await this._getAudio(url)
-        return data
+        return await this._getAudio(url)
     }
-
-
 }
-
 
 export {
     AbstractDownloader
 }
-
-

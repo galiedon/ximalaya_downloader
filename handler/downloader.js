@@ -1,7 +1,7 @@
 import {WebSiteDownloader} from '../handler/webSiteDownloader.js'
 import {DarwinDownloader} from '../handler/darwinDownloader.js'
+import {CustomError} from '../common/error.js'
 import {log} from '../common/log4jscf.js'
-import {sleep} from "../common/utils.js";
 
 class DownloaderFactory {
 
@@ -9,10 +9,8 @@ class DownloaderFactory {
         this.downloaders = []
     }
 
-
     /**
      * 创建一个工厂类
-     * @param type
      * @returns {DownloaderFactory}
      */
     static create() {
@@ -21,9 +19,7 @@ class DownloaderFactory {
 
     /**
      * 登录操作
-     * @param target 当前对象
      * @param type 要登录的目标
-     * @returns
      */
     async _login(type) {
         if (type == null) {
@@ -35,12 +31,12 @@ class DownloaderFactory {
                 isLimit: false,
                 downloader: new DarwinDownloader()
             })
-        } else if (type == 'pc') {
+        } else if (type === 'pc') {
             this.downloaders.push({
                 isLimit: false,
                 downloader: new DarwinDownloader()
             })
-        } else if (type == 'web') {
+        } else if (type === 'web') {
             this.downloaders.push({
                 isLimit: false,
                 downloader: new WebSiteDownloader()
@@ -48,8 +44,7 @@ class DownloaderFactory {
         } else {
             throw new Error(`暂不支持: ${type} 这种登录方式`)
         }
-        for (const index in this.downloaders) {
-            const item = this.downloaders[index]
+        for (const item of this.downloaders) {
             const downloader = item.downloader
             const isLogin = await downloader.isLogin()
             if (isLogin) {
@@ -60,43 +55,22 @@ class DownloaderFactory {
         }
     }
 
-
-    async _getItem(downloads) {
-        for (let i = downloads.length - 1; i >= 0; i--) {
-            let item = downloads[i]
-            if (item.isLimit) {
-                continue
-            }
-            let max = Math.floor(100 / (downloads.length - i))
-            while (await item.executeCounter.get() < max) {
-                await sleep(80)
-                await item.executeCounter.increment()
-                return item
-            }
-        }
-        for (const download of downloads) {
-            await download.executeCounter.set(0);
-        }
-        const _downloads = downloads.filter(download => download.isLimit == false)
-        if (_downloads.length == 0) {
-            return null
-        }
-        return downloads[downloads.length - 1]
-    }
-
     /**
      * 回调中获取下载器
+     * 错误处理策略:
+     *   - CustomError(code=999): 速率限制 → 标记该下载器受限，尝试下一个
+     *   - 其他错误(网络超时等): 瞬时错误 → 直接向上抛出，由调用方处理重试
      * @param type
      * @param cb
      * @returns {Promise<*>}
      */
     async getDownloader(type, cb) {
-
-        if (this.downloaders.length == 0) {
+        if (this.downloaders.length === 0) {
             await this._login(type)
         }
+
+        let lastError = null
         for (let i = 0; i < this.downloaders.length; i++) {
-            //const item = _getRandomItem(downloads)
             const item = this.downloaders[i]
             if (item.isLimit) {
                 continue
@@ -104,14 +78,22 @@ class DownloaderFactory {
             try {
                 return await cb(item.downloader)
             } catch (e) {
-                item.isLimit = true
-                continue
+                lastError = e
+                // 仅速率限制错误才永久标记该下载通道为受限
+                if (e instanceof CustomError && e.code === 999) {
+                    log.warn(`${item.downloader.deviceType}端已被速率限制，切换到下一个下载通道`)
+                    item.isLimit = true
+                    continue
+                }
+                // 其他错误(网络超时、DNS解析失败等)属于瞬时错误，向上抛出
+                throw e
             }
         }
-        log.error("所有下载方式都受限了，可以一个小时后后再过来试试哦")
-        throw new Error("所有下载方式都受限了，可以一个小时后后再过来试试哦")
-    }
 
+        // 所有下载器都被速率限制
+        log.error("所有下载方式都受限了，可以一个小时后再过来试试哦")
+        throw lastError || new Error("所有下载方式都受限了，可以一个小时后再过来试试哦")
+    }
 }
 
 export {

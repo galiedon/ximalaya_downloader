@@ -4,6 +4,7 @@ import json from "@rollup/plugin-json";
 
 export default {
   input: 'xmd.js',
+  external: ['playwright'],
   output: {
     file: 'dist/xmd.js',
     format: 'commonjs',
