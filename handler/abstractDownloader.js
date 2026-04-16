@@ -380,7 +380,7 @@ class AbstractDownloader {
         if (responseData == null) {
             throw new Error('数据为空')
         }
-        if (responseData.ret === 999 || responseData.ret === 1001) {
+        if (responseData.ret === 999 || responseData.ret === 1001 || responseData.ret === 3001) {
             log.error(`${this.deviceType}端喜马拉雅接口内部异常`, responseData)
             throw new CustomError(999, `${this.deviceType}端速率限制`)
         }

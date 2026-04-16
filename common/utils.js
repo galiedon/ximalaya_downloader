@@ -13,6 +13,22 @@ function httpCookie(cookies) {
 }
 
 
+/**
+ * 生成随机公网IP地址
+ * @returns {string}
+ */
+function randomPublicIP() {
+    const ranges = [
+        // 避开私有/保留段，生成看起来合理的公网IP
+        () => [Math.floor(Math.random() * 126) + 1, rand256(), rand256(), rand256()],     // 1.x - 126.x
+        () => [Math.floor(Math.random() * 64) + 128, rand256(), rand256(), rand256()],    // 128.x - 191.x
+        () => [Math.floor(Math.random() * 32) + 192, rand256(), rand256(), rand256()],    // 192.x - 223.x
+    ]
+    function rand256() { return Math.floor(Math.random() * 256) }
+    const gen = ranges[Math.floor(Math.random() * ranges.length)]
+    return gen().join('.')
+}
+
 const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 const UA = '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"'
 const PLATFORM = '"macOS"'
@@ -26,6 +42,7 @@ function buildHeaders(referer, cookie) {
     if (typeof cookie !== 'string') {
         throw new Error('Cookie must be string')
     }
+    const fakeIP = randomPublicIP()
     return {
         'Accept': '*/*',
         'Accept-Language': 'zh-CN,zh;q=0.9',
@@ -41,7 +58,10 @@ function buildHeaders(referer, cookie) {
         'User-Agent': USER_AGENT,
         'sec-ch-ua': UA,
         'sec-ch-ua-mobile': '?0',
-        'sec-ch-ua-platform': PLATFORM
+        'sec-ch-ua-platform': PLATFORM,
+        'X-Forwarded-For': fakeIP,
+        'X-Real-IP': fakeIP,
+        'X-Client-IP': fakeIP
     }
 }
 
@@ -107,5 +127,5 @@ function addCookie(_cookies, key, value) {
 
 
 export {
-    sleep, httpCookie, buildHeaders, parseCookies, convertCookiesToString, addCookie
+    sleep, httpCookie, buildHeaders, parseCookies, convertCookiesToString, addCookie, randomPublicIP
 }

@@ -242,6 +242,21 @@ async function main() {
                     }
                 }))
             await Promise.all(promises)
+
+            // 所有通道被限流时，等待到下个整点后自动恢复
+            if (factory.isAllLimited()) {
+                const now = new Date()
+                const nextHour = new Date(now)
+                nextHour.setHours(nextHour.getHours() + 1, 0, 30, 0) // 下个整点 + 30秒余量
+                const waitMs = nextHour.getTime() - now.getTime()
+                const waitMin = Math.ceil(waitMs / 60000)
+                log.warn(`所有下载通道被限流，等待 ${waitMin} 分钟到 ${nextHour.toLocaleTimeString()} 后自动重试...`)
+                await sleep(waitMs)
+                factory.resetLimits()
+                log.info("限流等待结束，重新开始下载...")
+                continue
+            }
+
             if (options.slow) {
                 await sleep(Math.floor(Math.random() * (5000 - 500 + 1)) + 500)
             }

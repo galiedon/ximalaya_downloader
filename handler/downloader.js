@@ -56,6 +56,23 @@ class DownloaderFactory {
     }
 
     /**
+     * 重置所有下载通道的限流标志
+     */
+    resetLimits() {
+        for (const item of this.downloaders) {
+            item.isLimit = false
+        }
+    }
+
+    /**
+     * 检查是否所有通道都被限流
+     * @returns {boolean}
+     */
+    isAllLimited() {
+        return this.downloaders.length > 0 && this.downloaders.every(item => item.isLimit)
+    }
+
+    /**
      * 回调中获取下载器
      * 错误处理策略:
      *   - CustomError(code=999): 速率限制 → 标记该下载器受限，尝试下一个
