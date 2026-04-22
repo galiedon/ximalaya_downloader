@@ -6,6 +6,10 @@ const defaultConfig = {
     "loginBaseUrl": "https://passport.ximalaya.com",
     "archives": "~/Downloads",
     "xmd": "~/.xmd",
+    "limiterTimeout": 3600000,
+    "defaultConcurrency": 3,
+    "interDelayMs": 5000,
+    "proxy": [],
     "cookie": {
         "www2": {
             "serverMode": false,

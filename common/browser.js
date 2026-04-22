@@ -11,6 +11,17 @@ class BrowserHelper {
         this.page = null
         // 浏览器页面是单实例，并发下载时必须串行化页面操作
         this._pageMutex = new Mutex()
+        // 代理池轮换（浏览器每次重启选一个）
+        this._browserProxyIndex = 0
+    }
+
+    _getBrowserProxy() {
+        const proxies = config.proxy
+        if (!proxies || proxies.length === 0) return undefined
+        const proxy = proxies[this._browserProxyIndex % proxies.length]
+        this._browserProxyIndex++
+        log.info(`浏览器使用代理: ${proxy}`)
+        return { server: proxy }
     }
 
     async init() {
@@ -22,7 +33,8 @@ class BrowserHelper {
         this.context = await chromium.launchPersistentContext(userDataDir, {
             headless: true,
             args: ['--disable-blink-features=AutomationControlled'],
-            viewport: {width: 1280, height: 720}
+            viewport: {width: 1280, height: 720},
+            proxy: this._getBrowserProxy(),
         })
         this.page = this.context.pages()[0] || await this.context.newPage()
         log.info('浏览器引擎已就绪')

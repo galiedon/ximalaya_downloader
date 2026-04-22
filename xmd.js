@@ -7,7 +7,6 @@ if (!util.isArray) util.isArray = Array.isArray;
 if (!util.isRegExp) util.isRegExp = (r) => r instanceof RegExp;
 
 import {config} from './common/config.js'
-import pLimit from 'p-limit'
 import {log} from './common/log4jscf.js'
 import {trackDB} from './db/trackdb.js'
 import {albumDB} from './db/albumdb.js'
@@ -97,7 +96,8 @@ async function main() {
     program
         .option('-a, --albumId <value>', 'albumId')
         .option('-k, --keyword <value>', '搜索关键词,通过关键词搜索专辑')
-        .option('-n, --concurrency <number>', '并发数,默认10', myParseInt)
+        .option('-n, --concurrency <number>', '每批从DB取track数(已废弃，默认1)', myParseInt)
+        .option('--delay <seconds>', '每批请求间隔秒数,默认5', myParseInt)
         .option('-s, --slow', '慢速模式')
         .option('-t, --type <value>', '登录类型,可选值pc、web,默认都登陆(需要扫码多次)')
         .option('-r, --replace', '清除缓存,任务将重新下载')
@@ -129,19 +129,23 @@ async function main() {
     log.info(`当前保存目录:${options.output}`)
 
     if (options.concurrency == null) {
-        options.concurrency = 10
+        options.concurrency = config.defaultConcurrency || 3
     }
-    if (!options.slow) {
-        emoji = '＞'
-        log.warn(`${'>>'.repeat(5)}当前为快速模式,很容易被官方大大踢屁屁哦`)
+    // --slow 增加请求间隔（默认串行已抗限流，slow模式进一步降低频率）
+    const baseDelay = (config.interDelayMs || 5000) / 1000
+    if (options.delay == null) {
+        options.delay = options.slow ? baseDelay * 3 : baseDelay
     } else {
-        emoji = '>'
-        options.concurrency = 1
-        log.info(`${'>>'.repeat(5)}当前为慢速模式`)
+        options.delay = options.delay // CLI --delay 优先
+    }
+    emoji = options.slow ? '>' : '＞'
+    if (options.slow && options.delay < baseDelay * 3) {
+        log.info(`${'>>'.repeat(5)}慢速模式: 请求间隔 ${options.delay}s`)
+    } else if (!options.slow) {
+        log.warn(`${'>>'.repeat(5)}当前为快速模式,请求间隔 ${options.delay}s`)
     }
 
-    log.info(`并发数:${options.concurrency}`)
-    const limit = pLimit(options.concurrency)
+    log.info(`每批取track数:${options.concurrency}, 请求间隔:${options.delay}s (已改为串行下载抗限流)`)
     let browser = null
 
     try {
@@ -227,38 +231,35 @@ async function main() {
         }
         log.info("数据加载中...")
         while (true) {
-            const tracks = await trackDB.find(condition, {"num": 1}, !options.slow ? options.concurrency * 2 : 1)
+            // 串行下载，每次只取一个 track（避免批量请求触发限流）
+            const tracks = await trackDB.find(condition, {"num": 1}, 1)
             if (tracks.length === 0) {
                 log.info("已经下载完成")
                 break
             }
-            const promises = tracks.map(track =>
-                limit(async () => {
-                    try {
-                        await download(factory, options, album, track)
-                    } catch (e) {
-                        log.error(`下载失败: ${track.title} - ${e.message}`)
-                        // 单个track下载失败不中断整批，继续下载其他track
-                    }
-                }))
-            await Promise.all(promises)
+            // 串行下载 + 逐请求间隔（并发下载同一时间打多枪，极易触发限流）
+            for (const track of tracks) {
+                try {
+                    await download(factory, options, album, track)
+                } catch (e) {
+                    log.error(`下载失败: ${track.title} - ${e.message}`)
+                }
+                // 每请求间隔：随机抖动避免规律性触发风控
+                const jitter = Math.floor(Math.random() * (options.delay * 500))
+                await sleep(options.delay * 1000 + jitter)
 
-            // 所有通道被限流时，等待到下个整点后自动恢复
-            if (factory.isAllLimited()) {
-                const now = new Date()
-                const nextHour = new Date(now)
-                nextHour.setHours(nextHour.getHours() + 1, 0, 30, 0) // 下个整点 + 30秒余量
-                const waitMs = nextHour.getTime() - now.getTime()
-                const waitMin = Math.ceil(waitMs / 60000)
-                log.warn(`所有下载通道被限流，等待 ${waitMin} 分钟到 ${nextHour.toLocaleTimeString()} 后自动重试...`)
-                await sleep(waitMs)
-                factory.resetLimits()
-                log.info("限流等待结束，重新开始下载...")
-                continue
-            }
-
-            if (options.slow) {
-                await sleep(Math.floor(Math.random() * (5000 - 500 + 1)) + 500)
+                if (factory.isAllLimited()) {
+                    log.warn("所有下载通道被限流，清理浏览器并等待限流恢复...")
+                    await browser.close()
+                    browser = new BrowserHelper()
+                    await browser.init()
+                    AbstractDownloader.setBrowser(browser)
+                    factory.resetLimits()
+                    const staggerMs = Math.ceil((config.limiterTimeout || 60 * 60 * 1000) / factory.channelCount)
+                    log.info(`通道错开恢复，首个通道 ${staggerMs / 1000 / 60} 分钟后可用，等待中...`)
+                    await sleep(staggerMs)
+                    break
+                }
             }
         }
     } finally {
