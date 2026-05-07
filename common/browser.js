@@ -163,25 +163,41 @@ class BrowserHelper {
             await this._syncCookies(cookieString)
 
             const soundUrl = `${config.baseUrl}/sound/${trackId}`
+            const maxRetries = 3
 
-            const responsePromise = this.page.waitForResponse((resp) => {
-                const url = resp.url()
-                if (!url.includes('/mobile-playpage/track/v3/baseInfo/')) {
-                    return false
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                let responsePromise = null
+                try {
+                    responsePromise = this.page.waitForResponse((resp) => {
+                        const url = resp.url()
+                        if (!url.includes('/mobile-playpage/track/v3/baseInfo/')) {
+                            return false
+                        }
+                        const u = new URL(url)
+                        return u.searchParams.get('trackId') === String(trackId)
+                    }, {timeout: 30000})
+
+                    await this.page.goto(soundUrl, {waitUntil: 'domcontentloaded', timeout: 30000})
+
+                    const playBtn = this.page.locator('.play-btn').first()
+                    await playBtn.waitFor({state: 'visible', timeout: 10000})
+                    await playBtn.click()
+
+                    const response = await responsePromise
+                    const payload = await response.json()
+                    return payload
+                } catch (err) {
+                    // 消化悬空的 responsePromise，防止 unhandled rejection
+                    if (responsePromise) {
+                        responsePromise.catch(() => {})
+                    }
+                    if (attempt >= maxRetries) {
+                        throw err
+                    }
+                    log.warn(`getBaseInfo 第${attempt}次尝试失败(trackId=${trackId}): ${err.message}，正在重试...`)
+                    await this.page.waitForTimeout(2000)
                 }
-                const u = new URL(url)
-                return u.searchParams.get('trackId') === String(trackId)
-            }, {timeout: 30000})
-
-            await this.page.goto(soundUrl, {waitUntil: 'domcontentloaded', timeout: 30000})
-
-            const playBtn = this.page.locator('.play-btn').first()
-            await playBtn.waitFor({state: 'visible', timeout: 10000})
-            await playBtn.click()
-
-            const response = await responsePromise
-            const payload = await response.json()
-            return payload
+            }
         })
     }
 
